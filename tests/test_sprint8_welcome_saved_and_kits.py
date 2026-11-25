@@ -53,17 +53,19 @@ def test_aliexpress_welcome_deal_unmasking_and_markdown_tag() -> None:
     assert len(offers) == 2
 
     first = offers[0]
-    assert first["price_raw"] == 41.22
-    assert first["raw_price_snippet"] == "US $41.22 (welcome $33.09 + $8.13)"
-    assert first["specs"]["is_welcome_deal_adjusted"] is True
+    assert first["price_raw"] == 33.09
+    assert first["raw_price_snippet"] == "US $33.09 (Welcome Deal; ~$35.74 існуючий акаунт до купонів)"
+    assert first["specs"]["is_welcome_deal_detected"] is True
     assert first["specs"]["welcome_price_usd"] == 33.09
     assert first["specs"]["welcome_discount_usd"] == 8.13
+    assert first["specs"]["est_existing_price_usd"] == 35.74
 
     second = offers[1]
-    assert second["price_raw"] == 35.0
-    assert second["specs"]["is_welcome_deal_adjusted"] is True
+    assert second["price_raw"] == 29.5
+    assert second["specs"]["is_welcome_deal_detected"] is True
     assert second["specs"]["welcome_price_usd"] == 29.5
     assert second["specs"]["welcome_discount_usd"] == 5.5
+    assert second["specs"]["est_existing_price_usd"] == 31.86
 
     md = relay.build_copy_to_antigravity_markdown(
         {
@@ -73,8 +75,8 @@ def test_aliexpress_welcome_deal_unmasking_and_markdown_tag() -> None:
             "tasks": [{**task, "offers": offers, "manual_links": [], "channel_summary": {}}],
         }
     )
-    assert "(реальна ціна без Welcome-бонусу; для нового акаунта $33.09)" in md
-    assert "(реальна ціна без Welcome-бонусу; для нового акаунта $29.50)" in md
+    assert "(Welcome Deal; для існуючого акаунта орієнтовно ~$35.74 до купонів)" in md
+    assert "(Welcome Deal; для існуючого акаунта орієнтовно ~$31.86 до купонів)" in md
 
 
 def test_parse_saved_pages_dir_olx_and_aliexpress_and_cli_mode(tmp_path: Path) -> None:
@@ -119,7 +121,7 @@ def test_parse_saved_pages_dir_olx_and_aliexpress_and_cli_mode(tmp_path: Path) -
     by_ch = {o["channel"]: o for o in task_bundle["offers"]}
     assert by_ch["olx"]["url"] == "https://www.olx.ua/d/uk/obyavlenie/alientek-t90b-kyiv-IDOlxSaved1.html"
     assert by_ch["olx"]["price_raw"] == 2150.0
-    assert by_ch["aliexpress"]["price_raw"] == 41.22
+    assert by_ch["aliexpress"]["price_raw"] == 33.09
     assert task_bundle["channel_summary"]["olx"]["status"] == "VERIFIED"
     assert task_bundle["channel_summary"]["aliexpress"]["status"] == "VERIFIED"
 

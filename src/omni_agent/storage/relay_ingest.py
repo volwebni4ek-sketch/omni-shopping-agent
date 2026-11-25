@@ -374,12 +374,22 @@ async def ingest_relay_bundle(
     engine = orch.landed_cost_engine
 
     results: list[dict[str, Any]] = []
+    seen_global_offer_ids: set[str] = set()
     for r_task in relay_bundle.tasks:
         task = relay_task_to_shopping_task(r_task)
-        offers = [
+        raw_offers = [
             relay_offer_to_normalized_offer(ro, task, landed_engine=engine)
             for ro in r_task.offers
         ]
+        deduped: dict[str, NormalizedOffer] = {}
+        for o in raw_offers:
+            if o.offer_id in deduped:
+                continue
+            if o.offer_id in seen_global_offer_ids:
+                o = o.model_copy(update={"offer_id": f"{task.task_id}__{o.offer_id}"})
+            deduped[o.offer_id] = o
+            seen_global_offer_ids.add(o.offer_id)
+        offers = list(deduped.values())
         if ua_only:
             offers = [o for o in offers if o.route_country.upper() == "UA"]
 

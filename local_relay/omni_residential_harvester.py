@@ -1594,12 +1594,15 @@ def parse_aliexpress_html(
             )
             if m_welcome:
                 welcome_disc = float(m_welcome.group(1).replace(",", "."))
-                real_price = round(shown_price + welcome_disc, 2)
-                price_val = real_price
-                raw_price_snippet = f"US ${real_price:.2f} (welcome ${shown_price:.2f} + ${welcome_disc:.2f})"
+                est_existing = round(shown_price * 1.08, 2)
+                price_val = shown_price
+                raw_price_snippet = (
+                    f"US ${shown_price:.2f} (Welcome Deal; ~${est_existing:.2f} існуючий акаунт до купонів)"
+                )
                 specs["welcome_price_usd"] = shown_price
                 specs["welcome_discount_usd"] = welcome_disc
-                specs["is_welcome_deal_adjusted"] = True
+                specs["est_existing_price_usd"] = est_existing
+                specs["is_welcome_deal_detected"] = True
             else:
                 price_val = shown_price
                 raw_price_snippet = f"US ${price_val:.2f}"
@@ -2479,9 +2482,9 @@ def build_copy_to_antigravity_markdown(bundle: dict[str, Any]) -> str:
                 price_str = f"{int(price_raw) if float(price_raw).is_integer() else price_raw} {cur}"
                 specs = off.get("specs") or {}
                 welcome_tag = ""
-                if specs.get("is_welcome_deal_adjusted") and specs.get("welcome_price_usd") is not None:
-                    wp = float(specs["welcome_price_usd"])
-                    welcome_tag = f" (реальна ціна без Welcome-бонусу; для нового акаунта ${wp:.2f})"
+                if specs.get("is_welcome_deal_detected") and specs.get("est_existing_price_usd") is not None:
+                    est_p = float(specs["est_existing_price_usd"])
+                    welcome_tag = f" (Welcome Deal; для існуючого акаунта орієнтовно ~${est_p:.2f} до купонів)"
                 loc = off.get("location") or specs.get("location") or ""
                 loc_str = f" · 📍 {loc}" if loc else ""
                 cond_str = f" · {off.get('raw_condition')}" if off.get("raw_condition") else ""
@@ -2661,10 +2664,11 @@ def run_self_test() -> int:
         ali_welcome_html, sample_task, "https://www.aliexpress.com/wholesale?SearchText=T90B"
     )
     assert len(ali_w_offers) == 1
-    assert ali_w_offers[0]["price_raw"] == 41.22
-    assert ali_w_offers[0]["specs"]["is_welcome_deal_adjusted"] is True
+    assert ali_w_offers[0]["price_raw"] == 33.09
+    assert ali_w_offers[0]["specs"]["is_welcome_deal_detected"] is True
     assert ali_w_offers[0]["specs"]["welcome_price_usd"] == 33.09
     assert ali_w_offers[0]["specs"]["welcome_discount_usd"] == 8.13
+    assert ali_w_offers[0]["specs"]["est_existing_price_usd"] == 35.74
     assert ali_w_ml is None
 
     ali_waf_html = "<html><body><script>var x5sec = 'punish_token';</script></body></html>"
@@ -2697,7 +2701,7 @@ def run_self_test() -> int:
     assert "SELFTEST-001" in md
     assert "https://www.olx.ua/d/uk/obyavlenie/monitor-lg-43un700-kyiv-IDTest123.html" in md
     assert "ANTIBOT_CHALLENGE_PUNISH" in md
-    assert "реальна ціна без Welcome-бонусу; для нового акаунта $33.09" in md
+    assert "Welcome Deal; для існуючого акаунта орієнтовно ~$35.74 до купонів" in md
 
     print("[relay] --self-test PASSED (OLX, Rozetka, Prom, Hotline, AliExpress + Welcome Deal + x5sec fail-closed, Markdown).")
     return 0
