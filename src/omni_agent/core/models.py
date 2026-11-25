@@ -105,6 +105,9 @@ class ShoppingTask(BaseModel):
     estimated_weight_kg: float = 1.5
     volumetric_factor: float = 1.0
     customs_mode: CustomsMode = CustomsMode.STANDARD_150EUR
+    pickup_regions: list[str] = Field(default_factory=list)
+    require_local_pickup: bool = False
+    min_ram_gb: Optional[int] = None
     status: str = "PENDING"
     human_notes: str = ""
 

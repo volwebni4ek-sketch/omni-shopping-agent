@@ -4,6 +4,7 @@ import re
 from typing import Any, Optional
 
 from omni_agent.core.models import ChannelTrustTier, NormalizedOffer, ShoppingTask
+from omni_agent.core.normalizer import extract_ram_gb
 
 TIER_A_BRANDS = {
     "dell", "lg", "apple", "sony", "bosch", "miele", "delonghi", "ecoflow",
@@ -26,6 +27,12 @@ POWER_STATION_KEYWORDS = (
     "зарядна станція", "зарядная станция", "power station", "lifepo4", "ecoflow",
     "bluetti", "jackery", "fossibot", "dabbsson", "oukitel", "delta", "ac200",
     "ups", "інвертор", "дбж", "kwh",
+)
+
+AI_MINI_PC_KEYWORDS = (
+    "mac studio", "mac mini", "strix halo", "ai max", "395", "evo-x2", "ms-s1",
+    "dgx spark", "unified memory", "міні-пк", "неттоп", "mini pc", "mini-pc",
+    "framework desktop", "gb10", "m2 ultra", "m3 ultra", "m4 max", "m4 pro",
 )
 
 EYE_CARE_PRIORITY_KEYWORDS = (
@@ -93,11 +100,15 @@ class DomainSpecScorer:
             return "monitors_large_format"
         if "power" in cat or "station" in cat or "станц" in cat:
             return "power_stations"
+        if "ai_mini_pc" in cat or "mini_pc" in cat or "mini-pc" in cat or "міні-пк" in cat:
+            return "ai_mini_pc"
 
         if any(kw in combined for kw in MONITOR_KEYWORDS):
             return "monitors_large_format"
         if any(kw in combined for kw in POWER_STATION_KEYWORDS) or re.search(r"\d+\s*k?wh\b", combined):
             return "power_stations"
+        if any(kw in combined for kw in AI_MINI_PC_KEYWORDS):
+            return "ai_mini_pc"
         return "general"
 
     @staticmethod
@@ -341,6 +352,62 @@ class DomainSpecScorer:
 
         return _clamp(score)
 
+    @staticmethod
+    def _score_ai_mini_pc(offer: NormalizedOffer, task: ShoppingTask) -> float:
+        specs = offer.specs or {}
+        title_low = (offer.title or "").lower()
+        combined = f"{title_low} {specs.get('chip', '')} {specs.get('cpu', '')} {specs.get('io', '')}".lower()
+
+        score = 45.0
+
+        # 1. Unified Memory / RAM Capacity
+        ram_gb = specs.get("ram_gb")
+        if ram_gb is not None:
+            try:
+                ram_val: Optional[int] = int(ram_gb)
+            except (TypeError, ValueError):
+                ram_val = extract_ram_gb(offer.title)
+        else:
+            ram_val = extract_ram_gb(offer.title)
+
+        if ram_val is not None:
+            if ram_val >= 192:
+                score += 30.0
+            elif ram_val >= 128:
+                score += 26.0
+            elif ram_val >= 96:
+                score += 20.0
+            elif ram_val >= 64:
+                score += 15.0
+            elif ram_val >= 48:
+                score += 9.0
+            elif ram_val >= 32:
+                score += 4.0
+            elif ram_val <= 24:
+                score -= 8.0
+
+        # 2. Architecture & Memory Bandwidth
+        if any(k in combined for k in ("m3 ultra", "m2 ultra", "m1 ultra")):
+            score += 16.0
+        elif any(k in combined for k in ("m4 max", "m5 max", "m2 max", "m3 max")):
+            score += 13.0
+        elif any(k in combined for k in ("ai max+ 395", "ai max+ pro 495", "ai max 395", "strix halo")):
+            score += 12.0
+        elif any(k in combined for k in ("m4 pro", "m5 pro", "gb10", "dgx spark")):
+            score += 10.0
+        elif any(k in combined for k in ("hx 370", "8845hs")):
+            score += 3.0
+
+        # 3. Server / Media I/O
+        if any(k in combined for k in ("10gbe", "10g lan", "10gbit", "10gbps")):
+            score += 5.0
+        if any(k in combined for k in ("thunderbolt 5", "usb4", "usb 4")):
+            score += 4.0
+        if any(k in combined for k in ("proxmox", "ecc", "pcie")):
+            score += 3.0
+
+        return _clamp(score, low=15.0, high=100.0)
+
     @classmethod
     def compute_quality_score(cls, offer: NormalizedOffer, task: ShoppingTask) -> float:
         profile = cls.detect_profile(offer, task)
@@ -348,6 +415,8 @@ class DomainSpecScorer:
             return cls._score_monitor(offer, task)
         if profile == "power_stations":
             return cls._score_power_station(offer, task)
+        if profile == "ai_mini_pc":
+            return cls._score_ai_mini_pc(offer, task)
         return cls._score_general(offer, task)
 
     @staticmethod

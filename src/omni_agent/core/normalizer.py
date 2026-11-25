@@ -275,3 +275,125 @@ def calculate_title_similarity(canonical_title: str, candidate_title: str) -> fl
         return round(min(0.90, jaccard + 0.35), 4)
 
     return round(jaccard, 4)
+
+
+_GENERIC_SEARCH_URL_PATTERNS: tuple[str, ...] = (
+    "/search",
+    "?q=",
+    "&q=",
+    "?text=",
+    "&text=",
+    "search_term=",
+    "/sr/?",
+    "/list/q-",
+    "/q-",
+    "/s?k=",
+    "/w/wholesale-",
+)
+
+_ROZETKA_PRODUCT_RE = re.compile(r"/p\d+(?:/|$|\?)")
+_PROM_PRODUCT_RE = re.compile(r"/(?:ua/)?[mp]-?[0-9a-zA-Z_-]+.*\.html")
+_HOTLINE_NUMERIC_CAT_RE = re.compile(r"/\d+/?(?:\?.*)?$")
+_HOTLINE_SLUG_WITH_LETTERS_RE = re.compile(r"/[a-zA-Z0-9_-]*[a-zA-Z][a-zA-Z0-9_-]*/?(?:\?.*)?$")
+
+
+def is_direct_product_url(url: str, channel: str = "") -> bool:
+    """
+    Verify that `url` points directly to a concrete product page rather than a
+    search result page or category listing.
+    """
+    if not url or not isinstance(url, str):
+        return False
+
+    url_clean = url.strip()
+    if not url_clean:
+        return False
+
+    u_low = url_clean.lower()
+    if any(pat in u_low for pat in _GENERIC_SEARCH_URL_PATTERNS):
+        return False
+
+    ch = (channel or "").strip().lower()
+    if ch == "rozetka":
+        return bool(_ROZETKA_PRODUCT_RE.search(u_low))
+    if ch == "olx":
+        return "/d/" in u_low or "/obyavlenie/" in u_low
+    if ch == "prom":
+        return bool(_PROM_PRODUCT_RE.search(u_low))
+    if ch == "hotline":
+        if "/sr/" in u_low:
+            return False
+        path = re.sub(r"^https?://[^/]+", "", u_low).split("#")[0].split("?")[0]
+        if not path or path == "/" or _HOTLINE_NUMERIC_CAT_RE.search(path):
+            return False
+        return bool(_HOTLINE_SLUG_WITH_LETTERS_RE.search(path))
+    if ch == "aliexpress":
+        return "/item/" in u_low
+    if ch.startswith("amazon"):
+        return "/dp/" in u_low or "/gp/product/" in u_low
+
+    return True
+
+
+_VALID_RAM_CAPACITIES_GB = {4, 8, 12, 16, 18, 24, 32, 36, 48, 64, 96, 128, 192, 256, 512}
+_RAM_SLASH_STORAGE_RE = re.compile(
+    r"\b(\d{2,3})\s*(?:GB|ГБ|G)?\s*/\s*\d+(?:\.\d+)?\s*(?:TB|ТБ|GB|ГБ)\b",
+    re.IGNORECASE,
+)
+_RAM_EXPLICIT_RE = re.compile(
+    r"\b(\d{2,3})\s*(?:GB|ГБ|Gb)\s*(?:RAM|ОЗП|Unified(?:\s+Memory)?|LPDDR\d*[Xx]?|DDR\d*|об'єднаної|пам'яті|памяти)\b",
+    re.IGNORECASE,
+)
+_RAM_UNIT_RE = re.compile(
+    r"\b(\d{2,3})\s*(?:GB|ГБ|Gb)\b",
+    re.IGNORECASE,
+)
+_STORAGE_SUFFIX_AFTER_RE = re.compile(
+    r"^\s*(?:SSD|NVMe|HDD|M\.2|ROM|eMMC|UFS|PCIe)\b",
+    re.IGNORECASE,
+)
+_STORAGE_PREFIX_BEFORE_RE = re.compile(
+    r"(?:SSD|NVMe|HDD|ROM|накопичувач)\s*$",
+    re.IGNORECASE,
+)
+
+
+def extract_ram_gb(title: str) -> Optional[int]:
+    """
+    Extract unified/system RAM capacity in GB from hardware titles
+    (e.g., '128GB', '128 ГБ', '64Gb RAM', '24/1TB' -> 24, '96GB/2TB' -> 96),
+    ignoring storage-only tokens like '512GB SSD', '1TB', '2TB', '4TB'.
+    """
+    if not title:
+        return None
+
+    # 1. Explicit RAM/Storage pair like "24/1TB" or "96GB/2TB"
+    for m in _RAM_SLASH_STORAGE_RE.finditer(title):
+        val = int(m.group(1))
+        if val in _VALID_RAM_CAPACITIES_GB:
+            return val
+
+    # 2. Explicit RAM label like "64Gb RAM" or "128GB Unified Memory"
+    for m in _RAM_EXPLICIT_RE.finditer(title):
+        val = int(m.group(1))
+        if val in _VALID_RAM_CAPACITIES_GB:
+            return val
+
+    # 3. Standalone GB/ГБ tokens, skipping SSD/HDD/storage contexts
+    candidates: list[int] = []
+    for m in _RAM_UNIT_RE.finditer(title):
+        val = int(m.group(1))
+        after = title[m.end():]
+        before = title[max(0, m.start() - 20):m.start()]
+        if _STORAGE_SUFFIX_AFTER_RE.match(after) or _STORAGE_PREFIX_BEFORE_RE.search(before):
+            continue
+        if val == 512 and "ram" not in title.lower() and "unified" not in title.lower():
+            # 512GB without explicit RAM/Unified marker is almost always an SSD
+            continue
+        if val in _VALID_RAM_CAPACITIES_GB:
+            candidates.append(val)
+
+    if candidates:
+        return candidates[0]
+    return None
+

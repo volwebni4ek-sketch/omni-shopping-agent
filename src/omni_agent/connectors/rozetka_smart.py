@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import urllib.parse
 from typing import Any, Optional
@@ -22,6 +23,12 @@ from omni_agent.core.models import (
 from omni_agent.core.normalizer import extract_model_codes, normalize_title
 
 
+CATEGORY_SECTION_MAP = {
+    "monitors_large_format": "80089",
+    "ai_mini_pc": "80095",
+}
+
+
 class RozetkaConnector(BaseConnector):
     channel_name = "rozetka"
     default_route_country = "UA"
@@ -31,9 +38,16 @@ class RozetkaConnector(BaseConnector):
         encoded = urllib.parse.quote(query)
         return f"https://rozetka.com.ua/ua/search/?text={encoded}&seller=rozetka"
 
-    def build_api_url(self, query: str) -> str:
+    def build_api_url(self, query: str, category: str = "") -> str:
         encoded = urllib.parse.quote(query)
-        return f"https://search.rozetka.com.ua/ua/search/api/v6/?front-type=xl&country=UA&lang=ua&text={encoded}"
+        base = f"https://search.rozetka.com.ua/ua/search/api/v6/?front-type=xl&country=UA&lang=ua&text={encoded}"
+        section_id = CATEGORY_SECTION_MAP.get((category or "").strip().lower())
+        if section_id:
+            return f"{base}&section_id={section_id}"
+        return base
+
+    def build_product_main_url(self, goods_id: str | int) -> str:
+        return f"https://product-api.rozetka.com.ua/v4/goods/get-main?front-type=xl&country=UA&lang=ua&goodsId={goods_id}"
 
     def parse_api_payload(
         self,
@@ -83,9 +97,24 @@ class RozetkaConnector(BaseConnector):
                 href = f"https://rozetka.com.ua{href}"
 
             img_url = str(item.get("image_main") or item.get("image") or "").strip()
-            seller_name = str(item.get("seller") or item.get("brand") or "Rozetka").strip()
-            is_official = "rozetka" in seller_name.lower() or item.get("is_rozetka_seller") is True
-            trust_tier = ChannelTrustTier.TIER_1_OFFICIAL if is_official else ChannelTrustTier.TIER_2_ESCROW
+
+            seller_id = item.get("seller_id")
+            raw_seller = item.get("seller")
+            is_official = (
+                seller_id == 5
+                or str(seller_id) == "5"
+                or item.get("is_rozetka_seller") is True
+                or (isinstance(raw_seller, str) and "rozetka" in raw_seller.lower())
+            )
+            if is_official:
+                store_name = "Rozetka.ua" if seller_id is not None else (str(raw_seller).strip() if isinstance(raw_seller, str) and raw_seller.strip() else "Rozetka.ua")
+                trust_tier = ChannelTrustTier.TIER_1_OFFICIAL
+            elif seller_id is not None and not raw_seller:
+                store_name = f"Rozetka Marketplace (#{seller_id})"
+                trust_tier = ChannelTrustTier.TIER_2_ESCROW
+            else:
+                store_name = str(raw_seller or item.get("brand") or "Rozetka Marketplace").strip()
+                trust_tier = ChannelTrustTier.TIER_2_ESCROW
 
             sell_status = str(item.get("sell_status") or "available").lower()
             in_stock = sell_status in ("available", "limited", "in_stock", "1", "true")
@@ -110,7 +139,16 @@ class RozetkaConnector(BaseConnector):
                     seen_mpns.add(code)
                     discovered_mpns.append(code)
 
-            condition = ConditionGrader.grade(title, raw_condition="Нове")
+            prod_obj = item.get("product") if isinstance(item.get("product"), dict) else {}
+            state = str(prod_obj.get("state") or item.get("state") or "new").lower()
+            if "refurb" in state:
+                raw_condition = "Refurbished"
+            elif "used" in state or "markdown" in state or item.get("is_markdown"):
+                raw_condition = "Уцінка"
+            else:
+                raw_condition = "Нове"
+
+            condition = ConditionGrader.grade(title, raw_condition=raw_condition)
             landed = self.landed_cost_engine.calculate(
                 item_price_raw=price_val,
                 currency="UAH",
@@ -126,7 +164,7 @@ class RozetkaConnector(BaseConnector):
                     task_id=task.task_id,
                     channel=self.channel_name,
                     route_country="UA",
-                    store_name=seller_name or "Rozetka",
+                    store_name=store_name,
                     trust_tier=trust_tier,
                     title=title,
                     normalized_title=normalize_title(title),
@@ -146,7 +184,7 @@ class RozetkaConnector(BaseConnector):
                     verification_status=VerificationStatus.VERIFIED if grounded else VerificationStatus.MANUAL_CHECK_LINK,
                     raw_price_snippet=raw_price_snippet,
                     is_grounded=grounded,
-                    specs={"sell_status": sell_status},
+                    specs={"sell_status": sell_status, "seller_id": seller_id, "state": state},
                 )
             )
 
@@ -166,6 +204,54 @@ class RozetkaConnector(BaseConnector):
             discovered_mpns=discovered_mpns,
         )
 
+    async def _hydrate_goods_stubs(
+        self,
+        goods: list[Any],
+        headers: dict[str, str],
+        max_hydrate: int = 10,
+    ) -> list[dict[str, Any]]:
+        hydrated: list[dict[str, Any]] = []
+        stub_ids: list[str] = []
+
+        for g in goods:
+            if not isinstance(g, dict):
+                continue
+            has_title = bool(g.get("title") or g.get("name"))
+            has_price = g.get("price") is not None
+            if has_title and has_price:
+                hydrated.append(g)
+            elif g.get("id") is not None and len(stub_ids) < max_hydrate:
+                stub_ids.append(str(g["id"]))
+
+        if not stub_ids:
+            return hydrated
+
+        async def _fetch_one(gid: str) -> Optional[dict[str, Any]]:
+            url = self.build_product_main_url(gid)
+            try:
+                sc, bdy, _ = await polite_get(
+                    url,
+                    headers=headers,
+                    timeout=self.timeout,
+                    client=self.client,
+                )
+                if sc != 200 or is_antibot_challenge(sc, bdy):
+                    return None
+                parsed = json.loads(bdy)
+                item_data = parsed.get("data") if isinstance(parsed, dict) else None
+                if isinstance(item_data, dict):
+                    item_data.setdefault("id", gid)
+                    return item_data
+            except Exception:
+                return None
+            return None
+
+        fetched = await asyncio.gather(*(_fetch_one(gid) for gid in stub_ids))
+        for item in fetched:
+            if item is not None:
+                hydrated.append(item)
+        return hydrated
+
     async def search(
         self,
         task: ShoppingTask,
@@ -173,7 +259,7 @@ class RozetkaConnector(BaseConnector):
         best_ua_uah: Optional[float] = None,
     ) -> ChannelHarvestResult:
         query = self.select_query(task, lang="uk")
-        api_url = self.build_api_url(query)
+        api_url = self.build_api_url(query, category=task.category)
         manual_url = self.build_search_url(query)
         headers = build_browser_headers(referer="https://rozetka.com.ua/")
         headers["Accept"] = "application/json, text/plain, */*"
@@ -212,6 +298,15 @@ class RozetkaConnector(BaseConnector):
                 best_ua_uah=best_ua_uah,
                 error_note=f"Invalid Rozetka JSON response: {exc}",
             )
+
+        data = payload.get("data") if isinstance(payload, dict) else None
+        raw_goods = (data or {}).get("goods") if isinstance(data, dict) else None
+        if isinstance(raw_goods, list) and any(
+            isinstance(g, dict) and g.get("id") is not None and not ((g.get("title") or g.get("name")) and g.get("price") is not None)
+            for g in raw_goods
+        ):
+            hydrated_goods = await self._hydrate_goods_stubs(raw_goods, headers=headers, max_hydrate=10)
+            payload = {"data": {"goods": hydrated_goods}}
 
         result = self.parse_api_payload(payload, task, search_url=manual_url)
         if result.manual_link is not None and best_ua_uah:

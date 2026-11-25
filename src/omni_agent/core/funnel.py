@@ -13,8 +13,37 @@ from omni_agent.core.models import (
     ShoppingTask,
     VerificationStatus,
 )
-from omni_agent.core.normalizer import detect_kit_trap, is_accessory_or_part
+from omni_agent.core.normalizer import (
+    detect_kit_trap,
+    extract_ram_gb,
+    is_accessory_or_part,
+    is_direct_product_url,
+)
 from omni_agent.core.spec_scorer import DomainSpecScorer
+
+
+CROSS_CATEGORY_NOISE_MARKERS: tuple[str, ...] = (
+    "дисплей телефона",
+    "радіоняня",
+    "відеоняня",
+    "мультиварка",
+    "мікросхема",
+    "каблучка",
+    "підвіска",
+    "сережки",
+    "домофон",
+    "4.3 дюйма",
+    "формат 4:3",
+    "сумка ",
+    "чохол ",
+    "зовнішня кишеня",
+    "док-станція",
+    "stream controller",
+    "studio deck",
+    "barebone",
+    "без озп",
+    "без пам'яті",
+)
 
 
 class FunnelAuditReport(BaseModel):
@@ -104,6 +133,17 @@ class StatisticalFunnelEngine:
                 pruned.append(offer)
                 continue
 
+            is_synthetic_fixture = (
+                offer.url.startswith("https://example.com/")
+                and "/search" not in offer.url.lower()
+                and "?" not in offer.url
+            )
+            if not is_synthetic_fixture and not is_direct_product_url(offer.url, offer.channel):
+                offer.deal_badge = DealTierBadge.PRUNED_OUTLIER
+                offer.prune_reason = "Посилання веде на пошук або каталог, а не на картку товару"
+                pruned.append(offer)
+                continue
+
             if not offer.in_stock or offer.landed_cost.realistic_landed_uah <= 0:
                 offer.deal_badge = DealTierBadge.PRUNED_OUTLIER
                 offer.prune_reason = "Немає в наявності або некоректна ціна"
@@ -113,6 +153,14 @@ class StatisticalFunnelEngine:
             if is_accessory_or_part(offer.title, task.raw_query):
                 offer.deal_badge = DealTierBadge.PRUNED_OUTLIER
                 offer.prune_reason = "Аксесуар або запчастина (кабель, кронштейн, матриця тощо)"
+                pruned.append(offer)
+                continue
+
+            title_low = (offer.title or "").lower()
+            query_low = (task.raw_query or "").lower()
+            if any(marker in title_low and marker.strip() not in query_low for marker in CROSS_CATEGORY_NOISE_MARKERS):
+                offer.deal_badge = DealTierBadge.PRUNED_OUTLIER
+                offer.prune_reason = "Семантичний шум з іншої категорії або barebone-набір"
                 pruned.append(offer)
                 continue
 
@@ -134,6 +182,31 @@ class StatisticalFunnelEngine:
                 offer.prune_reason = f"Недопустимий стан товару: {offer.condition.code.value}"
                 pruned.append(offer)
                 continue
+
+            if task.require_local_pickup and task.pickup_regions and (offer.channel or "").lower() == "olx":
+                loc = str(offer.specs.get("location") or offer.store_name or "").lower().strip()
+                if loc and loc != "продавець olx" and (" - " in loc or "(" in loc or "," in loc or loc != "olx"):
+                    regions_low = [r.lower() for r in task.pickup_regions if r and r.strip()]
+                    if regions_low and not any(reg in loc for reg in regions_low):
+                        offer.deal_badge = DealTierBadge.PRUNED_OUTLIER
+                        offer.prune_reason = "Місто оголошення поза радіусом живого огляду/самовивозу"
+                        pruned.append(offer)
+                        continue
+
+            if task.min_ram_gb is not None:
+                ram = extract_ram_gb(offer.title)
+                if ram is None and offer.specs.get("ram_gb") is not None:
+                    try:
+                        ram = int(offer.specs["ram_gb"])
+                    except (TypeError, ValueError):
+                        ram = None
+                if ram is not None and ram < task.min_ram_gb:
+                    offer.deal_badge = DealTierBadge.PRUNED_OUTLIER
+                    offer.prune_reason = (
+                        f"Обсяг пам'яті ({ram} ГБ) менший за мінімальну вимогу ({task.min_ram_gb} ГБ)"
+                    )
+                    pruned.append(offer)
+                    continue
 
             if rescore_specs:
                 DomainSpecScorer.score_offer(offer, task)

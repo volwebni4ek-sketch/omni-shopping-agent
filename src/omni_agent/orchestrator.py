@@ -207,7 +207,7 @@ class OmniOrchestrator:
                         title="Зарядна станція EcoFlow DELTA 2 Max 2048Wh LiFePO4 3000 cycles 15ms UPS",
                         price_raw=54999.0,
                         currency="UAH",
-                        url="https://rozetka.com.ua/ua/ecoflow-delta-2-max/",
+                        url="https://rozetka.com.ua/ua/ecoflow-delta-2-max/p389102001/",
                         delivery_days=1,
                         warranty_months=60,
                         specs={"battery_chemistry": "LiFePO4", "capacity_wh": 2048, "cycles_count": 3000, "ups_ms": 15, "noise_db": 35},
@@ -288,7 +288,7 @@ class OmniOrchestrator:
                         title='Монітор 42.5" LG 43SQ700S-W 4K UHD IPS Flicker-Safe USB-C 65W Smart Remote',
                         price_raw=18999.0,
                         currency="UAH",
-                        url="https://rozetka.com.ua/ua/lg-43sq700s-w/",
+                        url="https://rozetka.com.ua/ua/lg-43sq700s-w/p389102002/",
                         delivery_days=1,
                         warranty_months=24,
                         seller_rating=4.9,
@@ -795,6 +795,23 @@ class OmniOrchestrator:
                 inferred_cat = "monitors_large_format"
             elif any(k in q_low for k in ("станція", "station", "ecoflow", "bluetti", "lifepo4", "kwh")):
                 inferred_cat = "power_stations"
+            elif any(
+                k in q_low
+                for k in (
+                    "mac studio",
+                    "mac mini",
+                    "strix halo",
+                    "ai max",
+                    "395",
+                    "evo-x2",
+                    "ms-s1",
+                    "dgx spark",
+                    "unified memory",
+                    "міні-пк",
+                    " неттоп",
+                )
+            ):
+                inferred_cat = "ai_mini_pc"
 
         inferred_customs = customs_mode
         if inferred_customs is None:

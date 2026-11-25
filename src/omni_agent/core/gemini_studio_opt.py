@@ -35,16 +35,25 @@ class OptionalGeminiReviewer:
         self.max_calls_per_task = max_calls_per_task
         self.timeout_seconds = timeout_seconds
         self._task_call_counts: dict[str, int] = {}
+        self._mem_conn: Optional[sqlite3.Connection] = None
         self._init_db()
 
     @property
     def enabled(self) -> bool:
         return bool(self.api_key)
 
+    def _connect(self) -> sqlite3.Connection:
+        if self.db_path == ":memory:":
+            if self._mem_conn is None:
+                self._mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+            return self._mem_conn
+        return sqlite3.connect(self.db_path)
+
     def _init_db(self) -> None:
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.db_path) as conn:
+        conn = self._connect()
+        try:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS llm_eval_cache (
@@ -57,6 +66,9 @@ class OptionalGeminiReviewer:
                 """
             )
             conn.commit()
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
 
     @staticmethod
     def _compute_cache_key(task_id: str, prompt_payload: dict[str, Any]) -> str:
@@ -64,7 +76,8 @@ class OptionalGeminiReviewer:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def _get_cached(self, cache_key: str) -> Optional[dict[str, Any]]:
-        with sqlite3.connect(self.db_path) as conn:
+        conn = self._connect()
+        try:
             cur = conn.execute(
                 "SELECT response_json FROM llm_eval_cache WHERE cache_key = ?",
                 (cache_key,),
@@ -72,10 +85,16 @@ class OptionalGeminiReviewer:
             row = cur.fetchone()
             if row:
                 return json.loads(row[0])
+        except sqlite3.OperationalError:
+            return None
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
         return None
 
     def _set_cached(self, cache_key: str, task_id: str, result: dict[str, Any]) -> None:
-        with sqlite3.connect(self.db_path) as conn:
+        conn = self._connect()
+        try:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO llm_eval_cache (cache_key, model, task_id, response_json)
@@ -84,6 +103,9 @@ class OptionalGeminiReviewer:
                 (cache_key, "gemini-2.5-flash", task_id, json.dumps(result, ensure_ascii=False)),
             )
             conn.commit()
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
 
     @staticmethod
     def _deterministic_local_summary(prompt_payload: dict[str, Any], reason: str) -> dict[str, Any]:

@@ -68,9 +68,12 @@ class OLXConnector(BaseConnector):
                 return path
         return None
 
-    def build_search_url(self, query: str) -> str:
+    def build_search_url(self, query: str, region_slug: str = "") -> str:
         clean_q = re.sub(r"[^\w\s-]", "", query, flags=re.UNICODE).strip()
         slug = re.sub(r"\s+", "-", clean_q)
+        region_clean = (region_slug or "").strip().strip("/")
+        if region_clean:
+            return f"https://www.olx.ua/uk/list/{region_clean}/q-{slug}/"
         return f"https://www.olx.ua/uk/list/q-{slug}/"
 
     @staticmethod
@@ -252,15 +255,29 @@ class OLXConnector(BaseConnector):
             discovered_mpns=discovered_mpns,
         )
 
-    async def search(
+    @staticmethod
+    def _infer_region_slugs(task: ShoppingTask) -> list[str]:
+        if not task.require_local_pickup or not task.pickup_regions:
+            return [""]
+        regions_low = [r.lower().strip() for r in task.pickup_regions if r and r.strip()]
+        has_kyiv = any(
+            k in r for r in regions_low for k in ("київ", "kyiv", "kiev", "бровар", "ірпін", "буча", "бориспіль", "вишнев")
+        )
+        has_zhytomyr = any("житомир" in r or "zhytomyr" in r for r in regions_low)
+        slugs: list[str] = []
+        if has_kyiv:
+            slugs.append("ko")
+        if has_zhytomyr:
+            slugs.append("zhitomirskaya-oblast")
+        return slugs or [""]
+
+    async def _fetch_single_search(
         self,
+        url: str,
         task: ShoppingTask,
         *,
         best_ua_uah: Optional[float] = None,
     ) -> ChannelHarvestResult:
-        query = self.select_query(task, lang="uk")
-        url = self.build_search_url(query)
-
         html = ""
         if self.use_headless_chrome and self.chrome_path:
             html = await asyncio.to_thread(self._dump_dom_sync, url)
@@ -307,3 +324,61 @@ class OLXConnector(BaseConnector):
                 error_note=result.error_note,
             )
         return result
+
+    async def search(
+        self,
+        task: ShoppingTask,
+        *,
+        best_ua_uah: Optional[float] = None,
+    ) -> ChannelHarvestResult:
+        query = self.select_query(task, lang="uk")
+        region_slugs = self._infer_region_slugs(task)
+
+        if len(region_slugs) == 1:
+            url = self.build_search_url(query, region_slug=region_slugs[0])
+            return await self._fetch_single_search(url, task, best_ua_uah=best_ua_uah)
+
+        urls = [self.build_search_url(query, region_slug=rs) for rs in region_slugs]
+        results = await asyncio.gather(
+            *(self._fetch_single_search(u, task, best_ua_uah=best_ua_uah) for u in urls)
+        )
+
+        merged_offers: list[NormalizedOffer] = []
+        seen_offer_ids: set[str] = set()
+        seen_urls: set[str] = set()
+        discovered_mpns: list[str] = []
+        seen_mpns: set[str] = set()
+        first_manual: Optional[ChannelHarvestResult] = None
+
+        for res in results:
+            if res.manual_link is not None and first_manual is None:
+                first_manual = res
+            for code in res.discovered_mpns:
+                if code not in seen_mpns:
+                    seen_mpns.add(code)
+                    discovered_mpns.append(code)
+            for off in res.offers:
+                if off.offer_id not in seen_offer_ids and off.url not in seen_urls:
+                    seen_offer_ids.add(off.offer_id)
+                    seen_urls.add(off.url)
+                    merged_offers.append(off)
+
+        if merged_offers:
+            return ChannelHarvestResult(
+                channel=self.channel_name,
+                route_country="UA",
+                status=VerificationStatus.VERIFIED,
+                offers=merged_offers,
+                discovered_mpns=discovered_mpns,
+            )
+
+        if first_manual is not None:
+            return first_manual
+
+        return self.make_manual_result(
+            task=task,
+            direct_search_url=urls[0],
+            reason_status="EMPTY_DOM_OR_AWS_WAF",
+            best_ua_uah=best_ua_uah,
+            error_note="OLX regional searches returned no parseable items",
+        )
