@@ -1568,12 +1568,40 @@ def parse_aliexpress_html(
             pid = m_pid.group(1)
             if pid in seen_ids:
                 continue
-            title = a.get_text(" ", strip=True)
-            if len(title) < 6:
+            raw_card_text = a.get_text(" ", strip=True)
+            if len(raw_card_text) < 6:
                 continue
-            price_val = parse_price_value(title)
-            if price_val is None:
+            m_price_explicit = re.search(
+                r"(?:US\s*\$|\$|€|EUR|USD)\s*(\d+(?:[.,]\d{1,2})?)",
+                raw_card_text,
+                re.IGNORECASE,
+            )
+            if m_price_explicit:
+                try:
+                    price_val = float(m_price_explicit.group(1).replace(",", "."))
+                except ValueError:
+                    price_val = None
+            else:
+                price_val = parse_price_value(raw_card_text)
+            if price_val is None or price_val <= 0:
                 continue
+
+            # Clean title before price / UI chrome ("US $...", "See preview", "Similar items")
+            clean_title = re.split(
+                r"\s+(?:US\s*\$|\$|€|See preview|Similar items|\d[\d,]*\+?\s*sold)\b",
+                raw_card_text,
+                maxsplit=1,
+                flags=re.IGNORECASE,
+            )[0].strip()
+            if len(clean_title) < 6:
+                clean_title = raw_card_text[:120].strip()
+
+            m_sold = re.search(r"(\d[\d,]*)\+?\s*sold", raw_card_text, re.IGNORECASE)
+            orders_cnt = int(m_sold.group(1).replace(",", "")) if m_sold else 0
+            m_rating = re.search(r"(?:^|\s)([45](?:\.\d)?)\s+\d[\d,]*\+?\s*sold", raw_card_text, re.IGNORECASE)
+            rating_val = float(m_rating.group(1)) if m_rating else None
+            free_ship = "free shipping" in raw_card_text.lower()
+
             seen_ids.add(pid)
             offers.append(
                 {
@@ -1583,18 +1611,20 @@ def parse_aliexpress_html(
                     "route_country": route_country,
                     "store_name": "AliExpress Store",
                     "trust_tier": 2,
-                    "title": title,
+                    "title": clean_title,
                     "url": f"https://www.aliexpress.com/item/{pid}.html",
                     "image_url": "",
                     "price_raw": price_val,
                     "currency": currency,
                     "shipping_raw": 0.0,
-                    "raw_price_snippet": f"${price_val:.2f}",
+                    "raw_price_snippet": f"US ${price_val:.2f}",
                     "raw_condition": "New",
                     "in_stock": True,
                     "delivery_days": 14,
                     "warranty_months": 12,
-                    "specs": {},
+                    "seller_rating": rating_val,
+                    "orders_or_reviews": orders_cnt,
+                    "specs": {"free_shipping": free_ship},
                 }
             )
 
