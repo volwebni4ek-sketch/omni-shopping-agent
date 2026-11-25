@@ -11,6 +11,7 @@ import uvicorn
 from omni_agent.core.models import CustomsMode, ShoppingTask
 from omni_agent.orchestrator import OmniOrchestrator
 from omni_agent.storage.gsheets_bridge import GoogleSheetsBridge
+from omni_agent.storage.relay_ingest import ingest_relay_file
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -54,6 +55,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8765, help="Bind port")
     p_serve.add_argument("--db-path", default="data/shopping_hub.db", help="SQLite DB path")
     p_serve.add_argument("--reports-dir", default="reports", help="Reports directory")
+
+    # 4. ingest-relay
+    p_relay = sub.add_parser(
+        "ingest-relay",
+        help="Ingest a local residential relay JSON result into SQLite, IQR funnel, TOPSIS & HTML report",
+    )
+    p_relay.add_argument("relay_json", help="Path to latest_relay_result.json or relay_result_*.json")
+    p_relay.add_argument("--ua-only", action="store_true", help="Filter ingested offers strictly to UA channels")
+    p_relay.add_argument("--include-used", action="store_true", help="Include USED_GOOD, OPEN_BOX, and REFURBISHED offers")
+    p_relay.add_argument("--export-dir", default="reports", help="Directory for HTML & Markdown reports")
+    p_relay.add_argument("--db-path", default="data/shopping_hub.db", help="SQLite DB path")
+    p_relay.add_argument("--push-gsheets", action="store_true", help="Push results back to Google Sheets Web App")
+    p_relay.add_argument("--backup-drive", action="store_true", help="Backup SQLite DB to Google Drive folder if configured")
 
     return parser
 
@@ -178,6 +192,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         app = create_app(db_path=args.db_path, reports_dir=args.reports_dir)
         uvicorn.run(app, host=args.host, port=args.port)
+        return 0
+
+    if args.command == "ingest-relay":
+        bundles = asyncio.run(
+            ingest_relay_file(
+                args.relay_json,
+                db_path=args.db_path,
+                reports_dir=args.export_dir,
+                ua_only=args.ua_only,
+                include_used=args.include_used,
+                push_to_gsheets=args.push_gsheets,
+                backup_to_drive=args.backup_drive,
+            )
+        )
+        print(f"[omni-agent] Ingested {len(bundles)} relay task(s) from {args.relay_json}.")
+        for b in bundles:
+            ranked = b.get("ranked_offers") or []
+            print(
+                f"  - {b['task_id']}: {len(ranked)} ranked | "
+                f"HTML -> {b['reports']['latest_html']}"
+            )
         return 0
 
     return 1

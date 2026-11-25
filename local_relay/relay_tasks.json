@@ -1,0 +1,73 @@
+{
+  "manifest_version": "1.0",
+  "description": "Starter 3-channel routing matrix tasks for local residential IP harvesting",
+  "tasks": [
+    {
+      "task_id": "TASK-MON-001",
+      "raw_query": "Монітор 43\" 4K IPS LG 43SQ700S-W / 43UN700-B",
+      "canonical_mpns": ["43SQ700S-W", "43UN700-B"],
+      "queries_i18n": {
+        "uk": "Монітор 43 LG 43UN700-B 43SQ700S-W",
+        "en": "LG 43UN700-B 43SQ700S-W 43 4K IPS monitor"
+      },
+      "category": "monitors_large_format",
+      "allowed_conditions": ["brand_new", "open_box", "used_good", "refurbished"],
+      "max_budget_uah": 25000.0,
+      "target_price_uah": 18500.0,
+      "estimated_weight_kg": 11.5,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": ["Київ", "Житомир"],
+      "require_local_pickup": true,
+      "channels": ["olx", "rozetka", "hotline", "prom"]
+    },
+    {
+      "task_id": "TASK-AI-PC-002",
+      "raw_query": "Unified Memory Mini-PC 64GB-128GB (Mac Studio M2 Ultra / M4 Max / Ryzen AI Max+ 395)",
+      "canonical_mpns": ["395", "M2 Ultra", "M4 Max"],
+      "queries_i18n": {
+        "uk": "Mac Studio 128GB",
+        "en": "Apple Mac Studio 128GB",
+        "de": "Apple Mac Studio 128GB"
+      },
+      "search_queries": [
+        "Apple Mac Studio 128GB",
+        "Apple Mac mini M4 Pro 64GB",
+        "Ryzen AI Max 395 128GB"
+      ],
+      "category": "ai_mini_pc",
+      "allowed_conditions": ["brand_new", "open_box", "used_good", "refurbished"],
+      "max_budget_uah": 210000.0,
+      "target_price_uah": 145000.0,
+      "estimated_weight_kg": 4.0,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": ["Київ", "Житомир"],
+      "require_local_pickup": true,
+      "min_ram_gb": 64,
+      "channels": ["olx", "hotline", "idealo_de", "amazon_de"]
+    },
+    {
+      "task_id": "TASK-SMARTHOME-003",
+      "raw_query": "Smart Home & Server Essentials: SLZB-06 Zigbee PoE, Ugreen Nexode 100W GaN, NVMe USB4 40Gbps enclosure, HDMI 2.1 4K 60Hz certified cable",
+      "canonical_mpns": ["SLZB-06"],
+      "queries_i18n": {
+        "uk": "SLZB-06 Zigbee PoE",
+        "en": "SMLIGHT SLZB-06 Zigbee PoE"
+      },
+      "search_queries": [
+        "SLZB-06 Zigbee PoE",
+        "Ugreen Nexode 100W GaN",
+        "NVMe USB4 40Gbps enclosure",
+        "HDMI 2.1 4K 60Hz fiber cable"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 4500.0,
+      "target_price_uah": 2200.0,
+      "estimated_weight_kg": 0.4,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom"]
+    }
+  ]
+}
