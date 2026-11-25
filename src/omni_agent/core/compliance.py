@@ -39,8 +39,11 @@ class ComplianceManager:
         if not raw_price_snippet or not raw_price_snippet.strip():
             return False, "GROUNDING_MISSING_SNIPPET: raw_price_snippet is empty"
 
-        # Normalize spaces / NBSP inside numbers like "14 999 грн" or "14\u00a0999,50 €"
-        cleaned = raw_price_snippet.replace("\u00a0", " ").replace("\u202f", " ")
+        # Normalize HTML entities (&nbsp;, &#160;) and Unicode whitespace (\u00a0, \u2009, \u202f)
+        import html as _html
+
+        cleaned = _html.unescape(raw_price_snippet)
+        cleaned = re.sub(r"[\u00a0\u2007\u2009\u200a\u202f]", " ", cleaned)
         # Extract candidate numeric groups (with optional thousand spaces/dots/commas and decimals)
         raw_tokens = re.findall(r"\d+(?:[\s.,']\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?", cleaned)
         if not raw_tokens:

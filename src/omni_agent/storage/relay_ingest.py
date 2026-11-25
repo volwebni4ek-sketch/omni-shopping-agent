@@ -188,9 +188,18 @@ def relay_offer_to_normalized_offer(
 
     raw_snippet = (ro.raw_price_snippet or "").strip()
     if not raw_snippet and ro.price_raw > 0:
-        raw_snippet = f"{ro.price_raw:.2f} {currency}"
+        raw_snippet = f"{int(ro.price_raw) if float(ro.price_raw).is_integer() else ro.price_raw} {currency}"
 
     grounded, _ = ComplianceManager.verify_price_grounding(ro.price_raw, raw_snippet)
+    if not grounded and ro.price_raw > 0 and raw_snippet.isdigit() is False:
+        # Handle Rozetka/relay snippets like "2 099 ₴" with HTML/Unicode separators or integer vs float formatting
+        import html as _html
+        import re as _re
+
+        norm_snippet = _re.sub(r"[\u00a0\u2007\u2009\u200a\u202f\s]+", " ", _html.unescape(raw_snippet)).strip()
+        grounded, _ = ComplianceManager.verify_price_grounding(ro.price_raw, norm_snippet)
+        if grounded:
+            raw_snippet = norm_snippet
 
     cond = ConditionGrader.grade(
         ro.title,

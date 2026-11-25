@@ -1,0 +1,6 @@
+Як імпортувати сторінки, якщо сайт увімкнув анти-бот захист (OLX, AliExpress, Hotline):
+
+1. Відкрийте потрібний пошук або сторінку товару на OLX / AliExpress / Hotline у вашому звичайному залогіненому браузері (Chrome або Edge).
+2. Натисніть `Ctrl+S` (Зберегти сторінку як...) і збережіть `.html` або `.htm` файл у цю папку (`local_relay/saved_pages/`).
+3. Запустіть `START_LOCAL_HARVEST.bat` (або `python omni_residential_harvester.py --parse-saved`).
+4. Скрипт автоматично розпарсить збережені сторінки та додасть знайдені пропозиції у `output/latest_relay_result.json` і `output/COPY_TO_ANTIGRAVITY.md`.

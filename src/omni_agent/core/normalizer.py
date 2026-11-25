@@ -104,6 +104,17 @@ ACCESSORY_PATTERNS = [
     r"\bcarrying case\b",
     r"\bкоробка від\b",
     r"\bінструкція\b",
+    r"\bкилимок\b",
+    r"\bковрик\b",
+    r"\bжало\b",
+    r"\bжала\b",
+    r"\bпідставка\b",
+    r"\bпідставк\w*",
+    r"\bподставка\b",
+    r"\bтримач\w*",
+    r"\bдержател\w*",
+    r"\bфутляр\w*",
+    r"\bкейс\w*",
 ]
 
 KIT_TRAP_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -205,6 +216,15 @@ def extract_model_codes(title: str) -> list[str]:
     return codes
 
 
+_BUNDLE_KIT_INDICATORS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bнабір\s+(?:паяльник|паяльної|інструментів|зарядної|станції)\w*", re.IGNORECASE),
+    re.compile(r"\bкомплект\s+(?:паяльник|паяльної|інструментів|зарядної|станції)\w*", re.IGNORECASE),
+    re.compile(r"\bнабор\s+(?:паяльник|паяльной|инструментов)\w*", re.IGNORECASE),
+    re.compile(r"(?:^|\b)(?:паяльник|монітор|монитор|зарядна станція|зарядная станция|ноутбук|інвертор)\b.{0,80}(?:\+|з\s+(?:блоком\s+живлення|футляром|кейсом|підставкою|жалами|кабелем|зарядним|акб|батареєю)|with\s+\d+w\s+charger|with\s+(?:case|stand|charger|tips))", re.IGNORECASE),
+    re.compile(r"\b(?:set|kit|combo|bundle)\s+(?:with|w/|\+)\s+(?:\d+w\s+)?(?:charger|power\s+adapter|psu|case|stand|tips|cable)\b", re.IGNORECASE),
+)
+
+
 def is_accessory_or_part(title: str, canonical_query: str = "") -> bool:
     """Detect cables, mounts, bags, cases, brackets, screen protectors, power adapters, and spare parts."""
     if not title:
@@ -212,13 +232,21 @@ def is_accessory_or_part(title: str, canonical_query: str = "") -> bool:
     t_low = title.lower()
     q_low = (canonical_query or "").lower()
 
+    is_main_bundle = any(rx.search(t_low) for rx in _BUNDLE_KIT_INDICATORS)
+
     for pat in ACCESSORY_PATTERNS:
         m = re.search(pat, t_low, flags=re.IGNORECASE)
         if m:
             matched_word = m.group(0)
             # Only treat as unwanted accessory if the canonical query itself didn't ask for it
-            if not re.search(pat, q_low, flags=re.IGNORECASE) and matched_word not in q_low:
-                return True
+            if re.search(pat, q_low, flags=re.IGNORECASE) or matched_word in q_low:
+                continue
+            if is_main_bundle:
+                # If this is explicitly a main device + accessory kit/bundle, only check standalone accessory prefixes
+                prefix = t_low[: m.start()].strip()
+                if prefix:
+                    continue
+            return True
     return False
 
 

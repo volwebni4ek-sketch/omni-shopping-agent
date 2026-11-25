@@ -1578,13 +1578,31 @@ def parse_aliexpress_html(
             )
             if m_price_explicit:
                 try:
-                    price_val = float(m_price_explicit.group(1).replace(",", "."))
+                    shown_price = float(m_price_explicit.group(1).replace(",", "."))
                 except ValueError:
-                    price_val = None
+                    shown_price = None
             else:
-                price_val = parse_price_value(raw_card_text)
-            if price_val is None or price_val <= 0:
+                shown_price = parse_price_value(raw_card_text)
+            if shown_price is None or shown_price <= 0:
                 continue
+
+            specs: dict[str, Any] = {"free_shipping": "free shipping" in raw_card_text.lower()}
+            m_welcome = re.search(
+                r"New\s+shoppers\s*(?:save|-)\s*(?:US\s*\$|\$)\s*(\d+(?:[.,]\d{1,2})?)",
+                raw_card_text,
+                re.IGNORECASE,
+            )
+            if m_welcome:
+                welcome_disc = float(m_welcome.group(1).replace(",", "."))
+                real_price = round(shown_price + welcome_disc, 2)
+                price_val = real_price
+                raw_price_snippet = f"US ${real_price:.2f} (welcome ${shown_price:.2f} + ${welcome_disc:.2f})"
+                specs["welcome_price_usd"] = shown_price
+                specs["welcome_discount_usd"] = welcome_disc
+                specs["is_welcome_deal_adjusted"] = True
+            else:
+                price_val = shown_price
+                raw_price_snippet = f"US ${price_val:.2f}"
 
             # Clean title before price / UI chrome ("US $...", "See preview", "Similar items")
             clean_title = re.split(
@@ -1600,7 +1618,6 @@ def parse_aliexpress_html(
             orders_cnt = int(m_sold.group(1).replace(",", "")) if m_sold else 0
             m_rating = re.search(r"(?:^|\s)([45](?:\.\d)?)\s+\d[\d,]*\+?\s*sold", raw_card_text, re.IGNORECASE)
             rating_val = float(m_rating.group(1)) if m_rating else None
-            free_ship = "free shipping" in raw_card_text.lower()
 
             seen_ids.add(pid)
             offers.append(
@@ -1617,14 +1634,14 @@ def parse_aliexpress_html(
                     "price_raw": price_val,
                     "currency": currency,
                     "shipping_raw": 0.0,
-                    "raw_price_snippet": f"US ${price_val:.2f}",
+                    "raw_price_snippet": raw_price_snippet,
                     "raw_condition": "New",
                     "in_stock": True,
                     "delivery_days": 14,
                     "warranty_months": 12,
                     "seller_rating": rating_val,
                     "orders_or_reviews": orders_cnt,
-                    "specs": {"free_shipping": free_ship},
+                    "specs": specs,
                 }
             )
 
@@ -2213,6 +2230,211 @@ def run_task_harvest(
     }
 
 
+def detect_saved_page_channel(html_text: str, filename: str = "") -> str:
+    low_html = (html_text or "").lower()
+    low_name = (filename or "").lower()
+    combined = f"{low_name}\n{low_html}"
+
+    if "olx.ua" in combined or 'data-cy="l-card"' in low_html or "data-cy='l-card'" in low_html:
+        return "olx"
+    if "aliexpress.com" in combined or "/item/" in combined:
+        return "aliexpress"
+    if "prom.ua" in combined:
+        return "prom"
+    if "hotline.ua" in combined:
+        return "hotline"
+    if "amazon.de" in combined or "/dp/" in combined:
+        return "amazon_de"
+    if "rozetka.com.ua" in combined:
+        return "rozetka"
+    if "idealo.de" in combined:
+        return "idealo_de"
+    if "ceneo.pl" in combined:
+        return "ceneo_pl"
+    return "unknown"
+
+
+def _parse_rozetka_saved_html(
+    html_text: str,
+    task: dict[str, Any],
+    search_url: str,
+) -> tuple[list[dict[str, Any]], Optional[dict[str, Any]]]:
+    if not html_text or is_antibot_challenge(200, html_text):
+        return [], _make_manual_link(
+            task,
+            channel="rozetka",
+            route_country="UA",
+            currency="UAH",
+            reason_status="ANTIBOT_OR_EMPTY",
+            direct_search_url=search_url,
+        )
+    dom = parse_dom(html_text)
+    offers: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    task_id = task.get("task_id", "")
+
+    for idx, a in enumerate(dom.find_all("a", predicate=lambda n: bool(n.attr("href")))):
+        href = a.attr("href").strip()
+        full_url = f"https://rozetka.com.ua{href}" if href.startswith("/") else href
+        if not is_direct_product_url(full_url, "rozetka") or full_url in seen_urls:
+            continue
+        title = a.get_text(" ", strip=True)
+        if len(title) < 4:
+            continue
+        # Try to find a nearby price in the anchor text
+        price_val = parse_price_value(title)
+        if price_val is None or price_val <= 0:
+            continue
+        seen_urls.add(full_url)
+        m_id = re.search(r"/p(\d+)", full_url)
+        oid = f"rozetka_{m_id.group(1)}" if m_id else f"rozetka_saved_{idx}"
+        offers.append(
+            {
+                "offer_id": oid,
+                "task_id": task_id,
+                "channel": "rozetka",
+                "route_country": "UA",
+                "store_name": "Rozetka.ua (Saved Page)",
+                "trust_tier": 1,
+                "title": title,
+                "url": full_url,
+                "image_url": "",
+                "price_raw": price_val,
+                "currency": "UAH",
+                "shipping_raw": 0.0,
+                "raw_price_snippet": f"{int(price_val) if price_val.is_integer() else price_val} ₴",
+                "raw_condition": "Нове",
+                "in_stock": True,
+                "delivery_days": 1,
+                "warranty_months": 24,
+                "specs": {"source": "saved_browser_page"},
+            }
+        )
+    if not offers:
+        return [], _make_manual_link(
+            task,
+            channel="rozetka",
+            route_country="UA",
+            currency="UAH",
+            reason_status="EMPTY_SAVED_HTML",
+            direct_search_url=search_url,
+        )
+    return offers, None
+
+
+def parse_saved_pages_dir(saved_dir: Path) -> dict[str, Any]:
+    task: dict[str, Any] = {
+        "task_id": "SAVED_BROWSER_IMPORT",
+        "raw_query": "Збережені сторінки з вашого залогіненого браузера (Ctrl+S)",
+        "category": "general",
+        "canonical_mpns": [],
+        "queries_i18n": {},
+        "allowed_conditions": ["brand_new", "open_box", "used_good", "refurbished"],
+        "urgency_days": 14,
+        "estimated_weight_kg": 1.5,
+        "volumetric_factor": 1.0,
+        "customs_mode": "standard_150eur",
+        "pickup_regions": [],
+        "require_local_pickup": False,
+        "min_ram_gb": None,
+        "channels": [],
+    }
+
+    offers: list[dict[str, Any]] = []
+    manual_links: list[dict[str, Any]] = []
+    seen_offer_keys: set[str] = set()
+    seen_manual_urls: set[str] = set()
+    channel_summary: dict[str, dict[str, Any]] = {}
+
+    if not saved_dir.is_dir():
+        return {
+            **task,
+            "offers": [],
+            "manual_links": [],
+            "channel_summary": {},
+        }
+
+    html_files = sorted(
+        p
+        for p in saved_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in (".html", ".htm")
+    )
+
+    for html_file in html_files:
+        try:
+            html_text = html_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+
+        ch = detect_saved_page_channel(html_text, html_file.name)
+        if ch == "unknown":
+            continue
+
+        if ch not in task["channels"]:
+            task["channels"].append(ch)
+        if ch not in channel_summary:
+            channel_summary[ch] = {"status": "PENDING", "offers_count": 0, "manual_links_count": 0}
+
+        source_ref = html_file.name
+        parsed_offers: list[dict[str, Any]] = []
+        parsed_ml: Optional[dict[str, Any]] = None
+
+        if ch == "olx":
+            parsed_offers, parsed_ml = parse_olx_html(html_text, task, f"https://www.olx.ua/uk/list/ ({source_ref})")
+        elif ch == "aliexpress":
+            parsed_offers, parsed_ml = parse_aliexpress_html(
+                html_text, task, f"https://www.aliexpress.com/wholesale ({source_ref})"
+            )
+        elif ch == "prom":
+            parsed_offers, parsed_ml = parse_prom_html(html_text, task, f"https://prom.ua/ua/search ({source_ref})")
+        elif ch == "hotline":
+            parsed_offers, parsed_ml = parse_hotline_html(html_text, task, f"https://hotline.ua/ua/sr/ ({source_ref})")
+        elif ch == "amazon_de":
+            parsed_offers, parsed_ml = parse_amazon_de_html(html_text, task, f"https://www.amazon.de/s ({source_ref})")
+        elif ch == "idealo_de":
+            parsed_offers, parsed_ml = parse_idealo_html(
+                html_text, task, f"https://www.idealo.de/preisvergleich/ ({source_ref})"
+            )
+        elif ch == "ceneo_pl":
+            parsed_offers, parsed_ml = parse_ceneo_html(html_text, task, f"https://www.ceneo.pl/ ({source_ref})")
+        elif ch == "rozetka":
+            parsed_offers, parsed_ml = _parse_rozetka_saved_html(
+                html_text, task, f"https://rozetka.com.ua/ ({source_ref})"
+            )
+
+        for off in parsed_offers:
+            specs = dict(off.get("specs") or {})
+            specs.setdefault("saved_file", html_file.name)
+            off["specs"] = specs
+            key = f"{off.get('channel')}|{off.get('url')}"
+            if key not in seen_offer_keys:
+                seen_offer_keys.add(key)
+                offers.append(off)
+                channel_summary[ch]["offers_count"] += 1
+
+        if parsed_ml and not parsed_offers:
+            u = parsed_ml.get("direct_search_url", "")
+            if u and u not in seen_manual_urls:
+                seen_manual_urls.add(u)
+                manual_links.append(parsed_ml)
+                channel_summary[ch]["manual_links_count"] += 1
+
+    for ch, stat in channel_summary.items():
+        if stat["offers_count"] > 0:
+            stat["status"] = "VERIFIED"
+        elif stat["manual_links_count"] > 0:
+            stat["status"] = "MANUAL_CHECK_LINK"
+        else:
+            stat["status"] = "EMPTY"
+
+    return {
+        **task,
+        "offers": offers,
+        "manual_links": manual_links,
+        "channel_summary": channel_summary,
+    }
+
+
 def build_copy_to_antigravity_markdown(bundle: dict[str, Any]) -> str:
     lines = [
         "# 📦 Omni Residential IP Relay — Результати локального збору",
@@ -2255,12 +2477,17 @@ def build_copy_to_antigravity_markdown(bundle: dict[str, Any]) -> str:
                 price_raw = off.get("price_raw", 0)
                 cur = off.get("currency", "UAH")
                 price_str = f"{int(price_raw) if float(price_raw).is_integer() else price_raw} {cur}"
-                loc = off.get("location") or (off.get("specs") or {}).get("location") or ""
+                specs = off.get("specs") or {}
+                welcome_tag = ""
+                if specs.get("is_welcome_deal_adjusted") and specs.get("welcome_price_usd") is not None:
+                    wp = float(specs["welcome_price_usd"])
+                    welcome_tag = f" (реальна ціна без Welcome-бонусу; для нового акаунта ${wp:.2f})"
+                loc = off.get("location") or specs.get("location") or ""
                 loc_str = f" · 📍 {loc}" if loc else ""
                 cond_str = f" · {off.get('raw_condition')}" if off.get("raw_condition") else ""
                 lines.append(
                     f"{idx}. **[{off.get('channel')}]** [{off.get('title')}]({off.get('url')}) — "
-                    f"**{price_str}** ({off.get('store_name', '')}{loc_str}{cond_str})"
+                    f"**{price_str}**{welcome_tag} ({off.get('store_name', '')}{loc_str}{cond_str})"
                 )
             lines.append("")
         else:
@@ -2412,7 +2639,7 @@ def run_self_test() -> int:
     assert hl_offers[0]["orders_or_reviews"] == 7
     assert hl_ml is None
 
-    # 5. AliExpress JSON + x5sec fail-closed fallback
+    # 5. AliExpress JSON + Welcome Deal un-masking + x5sec fail-closed fallback
     ali_good_html = (
         '<script>window._init_data_={"mods":{"itemList":{"content":[{"productId":"100500777",'
         '"title":{"displayTitle":"SMLIGHT SLZB-06 Zigbee PoE Coordinator"},'
@@ -2424,6 +2651,21 @@ def run_self_test() -> int:
     assert len(ali_offers) == 1
     assert ali_offers[0]["url"] == "https://www.aliexpress.com/item/100500777.html"
     assert ali_ml is None
+
+    ali_welcome_html = (
+        '<html><body><a href="https://www.aliexpress.com/item/100500999888.html">'
+        'ALIENTEK T90B Soldering Iron 140W US $33.09 New shoppers - US $8.13 500+ sold Free shipping'
+        '</a></body></html>'
+    )
+    ali_w_offers, ali_w_ml = parse_aliexpress_html(
+        ali_welcome_html, sample_task, "https://www.aliexpress.com/wholesale?SearchText=T90B"
+    )
+    assert len(ali_w_offers) == 1
+    assert ali_w_offers[0]["price_raw"] == 41.22
+    assert ali_w_offers[0]["specs"]["is_welcome_deal_adjusted"] is True
+    assert ali_w_offers[0]["specs"]["welcome_price_usd"] == 33.09
+    assert ali_w_offers[0]["specs"]["welcome_discount_usd"] == 8.13
+    assert ali_w_ml is None
 
     ali_waf_html = "<html><body><script>var x5sec = 'punish_token';</script></body></html>"
     ali_waf_offers, ali_waf_ml = parse_aliexpress_html(ali_waf_html, sample_task, "https://www.aliexpress.com/wholesale?SearchText=SLZB-06")
@@ -2439,14 +2681,14 @@ def run_self_test() -> int:
         "tasks": [
             {
                 **sample_task,
-                "offers": olx_offers + rz_offers + prom_offers + hl_offers + ali_offers,
+                "offers": olx_offers + rz_offers + prom_offers + hl_offers + ali_offers + ali_w_offers,
                 "manual_links": [ali_waf_ml],
                 "channel_summary": {
                     "olx": {"status": "VERIFIED", "offers_count": 1},
                     "rozetka": {"status": "VERIFIED", "offers_count": 1},
                     "prom": {"status": "VERIFIED", "offers_count": 1},
                     "hotline": {"status": "VERIFIED", "offers_count": 1},
-                    "aliexpress": {"status": "MANUAL_CHECK_LINK", "offers_count": 0},
+                    "aliexpress": {"status": "MANUAL_CHECK_LINK", "offers_count": 1},
                 },
             }
         ],
@@ -2455,8 +2697,9 @@ def run_self_test() -> int:
     assert "SELFTEST-001" in md
     assert "https://www.olx.ua/d/uk/obyavlenie/monitor-lg-43un700-kyiv-IDTest123.html" in md
     assert "ANTIBOT_CHALLENGE_PUNISH" in md
+    assert "реальна ціна без Welcome-бонусу; для нового акаунта $33.09" in md
 
-    print("[relay] --self-test PASSED (OLX, Rozetka, Prom, Hotline, AliExpress + x5sec fail-closed, Markdown).")
+    print("[relay] --self-test PASSED (OLX, Rozetka, Prom, Hotline, AliExpress + Welcome Deal + x5sec fail-closed, Markdown).")
     return 0
 
 
@@ -2476,6 +2719,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=str(script_dir / "output"),
         help="Output directory for relay JSON and COPY_TO_ANTIGRAVITY.md",
     )
+    parser.add_argument(
+        "--saved-dir",
+        default=str(script_dir / "saved_pages"),
+        help="Directory with manually saved Chrome Ctrl+S HTML/HTM pages",
+    )
+    parser.add_argument(
+        "--parse-saved",
+        action="store_true",
+        help="Parse only saved_pages/*.html|*.htm without hitting the network",
+    )
     parser.add_argument("--chrome", action="store_true", help="Allow local Chrome/Edge --headless=new --dump-dom for OLX if available")
     parser.add_argument("--webhook-url", default="", help="Optional Google Apps Script / webhook URL for direct push")
     parser.add_argument("--timeout", type=float, default=15.0, help="HTTP timeout in seconds")
@@ -2486,44 +2739,70 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.self_test:
         return run_self_test()
 
-    tasks_path = Path(args.tasks)
-    if not tasks_path.is_file():
-        print(f"[relay] ERROR: Tasks file not found: {tasks_path}", file=sys.stderr)
-        return 1
-
-    raw_manifest = json.loads(tasks_path.read_text(encoding="utf-8"))
-    raw_tasks = raw_manifest.get("tasks") if isinstance(raw_manifest, dict) else raw_manifest
-    if not isinstance(raw_tasks, list) or not raw_tasks:
-        print("[relay] ERROR: No tasks found in manifest.", file=sys.stderr)
-        return 1
-
-    chrome_path = _find_chrome_path() if args.chrome else None
-    if args.chrome:
-        print(f"[relay] Local browser for DOM dump: {chrome_path or 'not found (HTTP fallback)'}")
-
+    saved_dir = Path(args.saved_dir)
     started = time.time()
     harvested_tasks: list[dict[str, Any]] = []
-    for t in raw_tasks:
-        if not isinstance(t, dict):
-            continue
-        print(f"[relay] Harvesting {t.get('task_id', 'TASK')}: {t.get('raw_query', '')} ...")
-        res = run_task_harvest(
-            t,
-            use_chrome=args.chrome,
-            chrome_path=chrome_path,
-            timeout=args.timeout,
-            max_workers=args.max_workers,
-        )
-        harvested_tasks.append(res)
+
+    if args.parse_saved:
+        print(f"[relay] Parsing manually saved browser pages from {saved_dir} (offline mode)...")
+        saved_bundle_task = parse_saved_pages_dir(saved_dir)
+        harvested_tasks.append(saved_bundle_task)
         print(
-            f"[relay]   -> {len(res['offers'])} direct offers, {len(res['manual_links'])} manual check link(s)."
+            f"[relay]   -> {len(saved_bundle_task['offers'])} direct offers, "
+            f"{len(saved_bundle_task['manual_links'])} manual check link(s)."
         )
+    else:
+        tasks_path = Path(args.tasks)
+        if not tasks_path.is_file():
+            print(f"[relay] ERROR: Tasks file not found: {tasks_path}", file=sys.stderr)
+            return 1
+
+        raw_manifest = json.loads(tasks_path.read_text(encoding="utf-8"))
+        raw_tasks = raw_manifest.get("tasks") if isinstance(raw_manifest, dict) else raw_manifest
+        if not isinstance(raw_tasks, list) or not raw_tasks:
+            print("[relay] ERROR: No tasks found in manifest.", file=sys.stderr)
+            return 1
+
+        chrome_path = _find_chrome_path() if args.chrome else None
+        if args.chrome:
+            print(f"[relay] Local browser for DOM dump: {chrome_path or 'not found (HTTP fallback)'}")
+
+        for t in raw_tasks:
+            if not isinstance(t, dict):
+                continue
+            print(f"[relay] Harvesting {t.get('task_id', 'TASK')}: {t.get('raw_query', '')} ...")
+            res = run_task_harvest(
+                t,
+                use_chrome=args.chrome,
+                chrome_path=chrome_path,
+                timeout=args.timeout,
+                max_workers=args.max_workers,
+            )
+            harvested_tasks.append(res)
+            print(
+                f"[relay]   -> {len(res['offers'])} direct offers, {len(res['manual_links'])} manual check link(s)."
+            )
+
+        if saved_dir.is_dir():
+            has_saved_html = any(
+                p.is_file() and p.suffix.lower() in (".html", ".htm")
+                for p in saved_dir.iterdir()
+            )
+            if has_saved_html:
+                print(f"[relay] Found saved browser HTML pages in {saved_dir}, parsing...")
+                saved_bundle_task = parse_saved_pages_dir(saved_dir)
+                if saved_bundle_task["offers"] or saved_bundle_task["manual_links"]:
+                    harvested_tasks.append(saved_bundle_task)
+                    print(
+                        f"[relay]   -> SAVED_BROWSER_IMPORT: {len(saved_bundle_task['offers'])} direct offers, "
+                        f"{len(saved_bundle_task['manual_links'])} manual check link(s)."
+                    )
 
     now_utc = dt.datetime.now(dt.timezone.utc)
     bundle = {
         "schema_version": "1.0",
         "generated_at": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source_ip_mode": "residential_local",
+        "source_ip_mode": "saved_browser_html" if args.parse_saved else "residential_local",
         "elapsed_sec": round(time.time() - started, 2),
         "tasks": harvested_tasks,
     }
