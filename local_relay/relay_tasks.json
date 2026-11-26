@@ -1,24 +1,259 @@
 {
   "manifest_version": "1.0",
-  "description": "Starter 3-channel routing matrix tasks for local residential IP harvesting",
+  "wave": "Wave 5 — Full Multi-Channel Harvest (Custom Jerseys 10-15x, BMW F30 OBD2, Cutters, Multimeter & Load, Spot Welder, YQK-70, OMRON M7, Wi-Fi Mesh, SmartHome, AI Mini-PC, 43in Monitor)",
+  "description": "Comprehensive multi-channel queue covering all active purchases across AliExpress, Prom, Rozetka, Hotline, OLX, Amazon.de, Idealo.de",
   "tasks": [
     {
-      "task_id": "TASK-MON-001",
-      "raw_query": "Монітор 43\" 4K IPS LG 43SQ700S-W / 43UN700-B",
-      "canonical_mpns": ["43SQ700S-W", "43UN700-B"],
+      "task_id": "TASK-JERSEY-016",
+      "raw_query": "Спортивні / футбольні футболки з індивідуальним принтом прізвища та номера (партія 10-15 шт, високий рейтинг та багато замовлень)",
+      "canonical_mpns": ["Custom Jersey"],
       "queries_i18n": {
-        "uk": "Монітор 43 LG 43UN700-B 43SQ700S-W",
-        "en": "LG 43UN700-B 43SQ700S-W 43 4K IPS monitor"
+        "uk": "футбольна форма з нанесенням прізвища номера на замовлення",
+        "en": "custom football jersey name number team set"
       },
-      "category": "monitors_large_format",
-      "allowed_conditions": ["brand_new", "open_box", "used_good", "refurbished"],
-      "max_budget_uah": 25000.0,
-      "target_price_uah": 18500.0,
-      "estimated_weight_kg": 11.5,
+      "search_queries": [
+        "custom football jersey name number",
+        "custom soccer jersey team uniform print",
+        "custom sports t-shirt name number breathable",
+        "футбольна форма з нанесенням прізвища"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new"],
+      "max_budget_uah": 1200.0,
+      "target_price_uah": 550.0,
+      "estimated_weight_kg": 0.25,
       "customs_mode": "standard_150eur",
-      "pickup_regions": ["Київ", "Житомир"],
-      "require_local_pickup": true,
-      "channels": ["olx", "rozetka", "hotline", "prom"]
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom"]
+    },
+    {
+      "task_id": "TASK-OBD-010",
+      "raw_query": "OBD2 сканер / читалка помилок для BMW F30 328i (Vgate vLinker BM+ / BMW ENET Wi-Fi / BMW ENET RJ45)",
+      "canonical_mpns": ["vLinker BM+", "BMW ENET"],
+      "queries_i18n": {
+        "uk": "Vgate vLinker BM+ BMW ENET",
+        "en": "Vgate vLinker BM+ BMW"
+      },
+      "search_queries": [
+        "Vgate vLinker BM+ BMW",
+        "BMW ENET WiFi adapter BimmerCode",
+        "BMW ENET cable OBD2 F series"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 2000.0,
+      "target_price_uah": 1100.0,
+      "estimated_weight_kg": 0.2,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom", "rozetka"]
+    },
+    {
+      "task_id": "TASK-CUTTERS-011",
+      "raw_query": "Бокорізи / кусачки для електроніки (Knipex 78 61 125 / LAOA / Tsunoda) та кабелеріз (Knipex 95 11 160 / LAOA)",
+      "canonical_mpns": ["78 61 125", "95 11 160", "LAOA"],
+      "queries_i18n": {
+        "uk": "Бокорізи Knipex 78 61 125 кабелеріз",
+        "en": "LAOA flush cutter cable cutter",
+        "de": "Knipex 78 61 125 Electronic Super Knips"
+      },
+      "search_queries": [
+        "LAOA flush wire cutter",
+        "LAOA cable cutter",
+        "Knipex 78 61 125",
+        "Knipex 95 11 160"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 2000.0,
+      "target_price_uah": 900.0,
+      "estimated_weight_kg": 0.35,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom", "rozetka", "amazon_de"]
+    },
+    {
+      "task_id": "TASK-MULTIMETER-013",
+      "raw_query": "Мультиметр + струмові кліщі AC/DC для щитка 230V та електроніки (UNI-T UT210E / UT139C)",
+      "canonical_mpns": ["UT210E", "UT139C"],
+      "queries_i18n": {
+        "uk": "UNI-T UT210E",
+        "en": "UNI-T UT210E"
+      },
+      "search_queries": [
+        "UNI-T UT210E",
+        "UNI-T UT139C"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 2800.0,
+      "target_price_uah": 1700.0,
+      "estimated_weight_kg": 0.45,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom", "rozetka"]
+    },
+    {
+      "task_id": "TASK-LOAD-014",
+      "raw_query": "Електронне навантаження з монітором та вимірюванням опору (ATORCH DL24P 180W / DL24M / YR1035+)",
+      "canonical_mpns": ["DL24P", "YR1035+"],
+      "queries_i18n": {
+        "uk": "ATORCH DL24P",
+        "en": "ATORCH DL24P 180W"
+      },
+      "search_queries": [
+        "ATORCH DL24P 180W",
+        "YR1035+ internal resistance"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 2200.0,
+      "target_price_uah": 1200.0,
+      "estimated_weight_kg": 0.5,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom", "rozetka"]
+    },
+    {
+      "task_id": "TASK-BMS-015",
+      "raw_query": "BMS 1S 15A 6MOS для 5x 18650 у паралелі + нейтральний силікон-герметик Kafuter K-705 / K-704",
+      "canonical_mpns": ["1S 15A", "K-705", "K-704"],
+      "queries_i18n": {
+        "uk": "BMS 1S 15A Kafuter K-705",
+        "en": "1S 3.7V 15A 6MOS BMS 18650"
+      },
+      "search_queries": [
+        "1S 3.7V 15A 6MOS BMS 18650",
+        "Kafuter K-705 K-704 silicone"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new"],
+      "max_budget_uah": 400.0,
+      "target_price_uah": 150.0,
+      "estimated_weight_kg": 0.15,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom"]
+    },
+    {
+      "task_id": "TASK-SPOTW-009",
+      "raw_query": "Контактна точкова зварка для акумуляторів 18650/21700 (Glitter 801D / AWithZ / FNIRSI SWM-10)",
+      "canonical_mpns": ["801D", "SWM-10", "P20B"],
+      "queries_i18n": {
+        "uk": "Точкова зварка для акумуляторів 18650",
+        "en": "Glitter 801D spot welder 18650"
+      },
+      "search_queries": [
+        "Glitter 801D spot welder",
+        "AWithZ spot welder 18650",
+        "FNIRSI SWM-10 spot welder"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 6500.0,
+      "target_price_uah": 4000.0,
+      "estimated_weight_kg": 2.2,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom", "rozetka"]
+    },
+    {
+      "task_id": "TASK-CRIMP-006",
+      "raw_query": "Гідравлічна обжимка силових наконечників YQK-70 (4-70 мм²)",
+      "canonical_mpns": ["YQK-70"],
+      "queries_i18n": {
+        "uk": "Гідравлічний прес YQK-70",
+        "en": "YQK-70 hydraulic crimping tool 4-70mm2"
+      },
+      "search_queries": [
+        "YQK-70",
+        "YQK-70 hydraulic crimping tool"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 2500.0,
+      "target_price_uah": 1400.0,
+      "estimated_weight_kg": 2.6,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["prom", "rozetka", "aliexpress"]
+    },
+    {
+      "task_id": "TASK-TONOM-007",
+      "raw_query": "Тонометр OMRON M7 Intelli IT (манжета Intelli Wrap 22-42 см, AFib)",
+      "canonical_mpns": ["M7", "HEM-7361T"],
+      "queries_i18n": {
+        "uk": "OMRON M7 Intelli IT",
+        "en": "OMRON M7 Intelli IT",
+        "de": "OMRON M7 Intelli IT"
+      },
+      "search_queries": [
+        "OMRON M7 Intelli IT"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new"],
+      "max_budget_uah": 5500.0,
+      "target_price_uah": 3800.0,
+      "estimated_weight_kg": 0.9,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["rozetka", "hotline", "prom", "amazon_de", "idealo_de"]
+    },
+    {
+      "task_id": "TASK-MESH-008",
+      "raw_query": "Wi-Fi Mesh система у квартиру (2 вузли / 2-pack: TP-Link Deco X50 / Deco BE25 / ASUS ZenWiFi)",
+      "canonical_mpns": ["Deco X50", "Deco BE25", "ZenWiFi"],
+      "queries_i18n": {
+        "uk": "TP-Link Deco X50 2-pack",
+        "en": "TP-Link Deco X50 2-pack",
+        "de": "TP-Link Deco X50 2er Set"
+      },
+      "search_queries": [
+        "TP-Link Deco X50 2-pack",
+        "TP-Link Deco BE25 2-pack",
+        "ASUS ZenWiFi XD5 2-pack"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 9500.0,
+      "target_price_uah": 5800.0,
+      "estimated_weight_kg": 1.6,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["rozetka", "hotline", "prom", "amazon_de", "idealo_de"]
+    },
+    {
+      "task_id": "TASK-SMARTHOME-003",
+      "raw_query": "Smart Home & Server Essentials: SLZB-06 Zigbee PoE, NVMe USB4 40Gbps enclosure, HDMI 2.1 certified cable",
+      "canonical_mpns": ["SLZB-06"],
+      "queries_i18n": {
+        "uk": "SLZB-06 Zigbee PoE",
+        "en": "SMLIGHT SLZB-06 Zigbee PoE"
+      },
+      "search_queries": [
+        "SLZB-06 Zigbee PoE",
+        "NVMe USB4 40Gbps enclosure",
+        "HDMI 2.1 4K 120Hz certified cable"
+      ],
+      "category": "general",
+      "allowed_conditions": ["brand_new", "open_box"],
+      "max_budget_uah": 4500.0,
+      "target_price_uah": 2200.0,
+      "estimated_weight_kg": 0.4,
+      "customs_mode": "standard_150eur",
+      "pickup_regions": [],
+      "require_local_pickup": false,
+      "channels": ["aliexpress", "prom", "rozetka"]
     },
     {
       "task_id": "TASK-AI-PC-002",
@@ -46,28 +281,22 @@
       "channels": ["olx", "hotline", "idealo_de", "amazon_de"]
     },
     {
-      "task_id": "TASK-SMARTHOME-003",
-      "raw_query": "Smart Home & Server Essentials: SLZB-06 Zigbee PoE, Ugreen Nexode 100W GaN, NVMe USB4 40Gbps enclosure, HDMI 2.1 4K 60Hz certified cable",
-      "canonical_mpns": ["SLZB-06"],
+      "task_id": "TASK-MON-001",
+      "raw_query": "Монітор 43\" 4K IPS LG 43SQ700S-W / 43UN700-B / Dell U4323QE",
+      "canonical_mpns": ["43SQ700S-W", "43UN700-B", "U4323QE"],
       "queries_i18n": {
-        "uk": "SLZB-06 Zigbee PoE",
-        "en": "SMLIGHT SLZB-06 Zigbee PoE"
+        "uk": "Монітор 43 LG 43UN700-B 43SQ700S-W",
+        "en": "LG 43UN700-B 43SQ700S-W 43 4K IPS monitor"
       },
-      "search_queries": [
-        "SLZB-06 Zigbee PoE",
-        "Ugreen Nexode 100W GaN",
-        "NVMe USB4 40Gbps enclosure",
-        "HDMI 2.1 4K 60Hz fiber cable"
-      ],
-      "category": "general",
-      "allowed_conditions": ["brand_new", "open_box"],
-      "max_budget_uah": 4500.0,
-      "target_price_uah": 2200.0,
-      "estimated_weight_kg": 0.4,
+      "category": "monitors_large_format",
+      "allowed_conditions": ["brand_new", "open_box", "used_good", "refurbished"],
+      "max_budget_uah": 25000.0,
+      "target_price_uah": 18500.0,
+      "estimated_weight_kg": 11.5,
       "customs_mode": "standard_150eur",
-      "pickup_regions": [],
-      "require_local_pickup": false,
-      "channels": ["aliexpress", "prom"]
+      "pickup_regions": ["Київ", "Житомир"],
+      "require_local_pickup": true,
+      "channels": ["olx", "rozetka", "hotline", "prom"]
     }
   ]
 }

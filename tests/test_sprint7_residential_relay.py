@@ -44,7 +44,7 @@ def test_starter_relay_tasks_json_valid_and_covers_3_channels() -> None:
     data = json.loads(STARTER_TASKS_PATH.read_text(encoding="utf-8"))
     tasks = data["tasks"]
     ids = {t["task_id"] for t in tasks}
-    assert ids == {"TASK-MON-001", "TASK-AI-PC-002", "TASK-SMARTHOME-003"}
+    assert {"TASK-MON-001", "TASK-AI-PC-002", "TASK-SMARTHOME-003"}.issubset(ids)
 
     by_id = {t["task_id"]: t for t in tasks}
     assert set(by_id["TASK-MON-001"]["channels"]) >= {"olx", "rozetka", "hotline", "prom"}

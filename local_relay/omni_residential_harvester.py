@@ -27,6 +27,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -1660,33 +1661,44 @@ def parse_aliexpress_html(
     return offers, None
 
 
+_ALIEXPRESS_LOCK = threading.Lock()
+_ALIEXPRESS_LAST_TS = 0.0
+
+
 def harvest_aliexpress(
     task: dict[str, Any],
     query: str,
     *,
     timeout: float = 20.0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    global _ALIEXPRESS_LAST_TS
     url = build_aliexpress_search_url(query)
     cookies = {"aep_usuc_f": "site=glo&c_tp=USD&region=UA&b_locale=en_US"}
-    try:
-        sc, body, final_url = http_get(
-            url,
-            cookies=cookies,
-            accept_language="en-US,en;q=0.9",
-            timeout=timeout,
-        )
-    except Exception as exc:
-        return [], [
-            _make_manual_link(
-                task,
-                channel="aliexpress",
-                route_country="UA",
-                currency="USD",
-                reason_status="HTTP_ERROR",
-                direct_search_url=url,
-                note=str(exc),
+    with _ALIEXPRESS_LOCK:
+        now = time.monotonic()
+        wait_s = (_ALIEXPRESS_LAST_TS + random.uniform(2.5, 4.0)) - now
+        if wait_s > 0:
+            time.sleep(wait_s)
+        _ALIEXPRESS_LAST_TS = time.monotonic()
+        try:
+            sc, body, final_url = http_get(
+                url,
+                cookies=cookies,
+                accept_language="en-US,en;q=0.9",
+                timeout=timeout,
             )
-        ]
+        except Exception as exc:
+            return [], [
+                _make_manual_link(
+                    task,
+                    channel="aliexpress",
+                    route_country="UA",
+                    currency="USD",
+                    reason_status="HTTP_ERROR",
+                    direct_search_url=url,
+                    note=str(exc),
+                )
+            ]
 
     if is_antibot_challenge(sc, body):
         return [], [
