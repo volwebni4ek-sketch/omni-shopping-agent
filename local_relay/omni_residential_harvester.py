@@ -1360,35 +1360,42 @@ def harvest_hotline(
     task: dict[str, Any],
     query: str,
     *,
+    use_chrome: bool = False,
+    chrome_path: Optional[str] = None,
     timeout: float = 15.0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     url = build_hotline_search_url(query)
-    try:
-        sc, body, final_url = http_get(url, referer="https://hotline.ua/", timeout=timeout)
-    except Exception as exc:
-        return [], [
-            _make_manual_link(
-                task,
-                channel="hotline",
-                route_country="UA",
-                currency="UAH",
-                reason_status="HTTP_ERROR",
-                direct_search_url=url,
-                note=str(exc),
-            )
-        ]
+    body = ""
+    final_url = url
+    if use_chrome and chrome_path:
+        body = _dump_dom_with_chrome(chrome_path, url, timeout=max(20.0, timeout))
+    if not body:
+        try:
+            sc, body, final_url = http_get(url, referer="https://hotline.ua/", timeout=timeout)
+        except Exception as exc:
+            return [], [
+                _make_manual_link(
+                    task,
+                    channel="hotline",
+                    route_country="UA",
+                    currency="UAH",
+                    reason_status="HTTP_ERROR",
+                    direct_search_url=url,
+                    note=str(exc),
+                )
+            ]
 
-    if is_antibot_challenge(sc, body):
-        return [], [
-            _make_manual_link(
-                task,
-                channel="hotline",
-                route_country="UA",
-                currency="UAH",
-                reason_status=f"ANTIBOT_HTTP_{sc}",
-                direct_search_url=final_url or url,
-            )
-        ]
+        if is_antibot_challenge(sc, body):
+            return [], [
+                _make_manual_link(
+                    task,
+                    channel="hotline",
+                    route_country="UA",
+                    currency="UAH",
+                    reason_status=f"ANTIBOT_HTTP_{sc}",
+                    direct_search_url=final_url or url,
+                )
+            ]
 
     offers, mlink = parse_hotline_html(body, task, final_url or url)
     return offers, ([mlink] if mlink else [])
@@ -1669,6 +1676,8 @@ def harvest_aliexpress(
     task: dict[str, Any],
     query: str,
     *,
+    use_chrome: bool = False,
+    chrome_path: Optional[str] = None,
     timeout: float = 20.0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     global _ALIEXPRESS_LAST_TS
@@ -1701,6 +1710,12 @@ def harvest_aliexpress(
             ]
 
     if is_antibot_challenge(sc, body):
+        if use_chrome and chrome_path:
+            chrome_body = _dump_dom_with_chrome(chrome_path, url, timeout=max(20.0, timeout))
+            if chrome_body and not is_antibot_challenge(200, chrome_body):
+                offers, mlink = parse_aliexpress_html(chrome_body, task, url)
+                if offers:
+                    return offers, ([mlink] if mlink else [])
         return [], [
             _make_manual_link(
                 task,
@@ -1713,6 +1728,10 @@ def harvest_aliexpress(
         ]
 
     offers, mlink = parse_aliexpress_html(body, task, url)
+    if not offers and use_chrome and chrome_path:
+        chrome_body = _dump_dom_with_chrome(chrome_path, url, timeout=max(20.0, timeout))
+        if chrome_body and not is_antibot_challenge(200, chrome_body):
+            offers, mlink = parse_aliexpress_html(chrome_body, task, url)
     return offers, ([mlink] if mlink else [])
 
 
@@ -2096,41 +2115,53 @@ def parse_amazon_de_html(html_text: str, task: dict[str, Any], search_url: str) 
     return offers, None
 
 
-def harvest_amazon_de(task: dict[str, Any], query: str, *, timeout: float = 15.0) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def harvest_amazon_de(
+    task: dict[str, Any],
+    query: str,
+    *,
+    use_chrome: bool = False,
+    chrome_path: Optional[str] = None,
+    timeout: float = 15.0,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     url = build_amazon_de_search_url(query)
-    try:
-        sc, body, final_url = http_get(
-            url,
-            referer="https://www.amazon.de/",
-            accept_language="de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-            timeout=timeout,
-        )
-    except Exception as exc:
-        return [], [
-            _make_manual_link(
-                task,
-                channel="amazon_de",
-                route_country="DE",
-                currency="EUR",
-                reason_status="HTTP_ERROR",
-                direct_search_url=url,
-                note=str(exc),
+    body = ""
+    final_url = url
+    if use_chrome and chrome_path:
+        body = _dump_dom_with_chrome(chrome_path, url, timeout=max(20.0, timeout))
+    if not body:
+        try:
+            sc, body, final_url = http_get(
+                url,
+                referer="https://www.amazon.de/",
+                accept_language="de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+                timeout=timeout,
             )
-        ]
+        except Exception as exc:
+            return [], [
+                _make_manual_link(
+                    task,
+                    channel="amazon_de",
+                    route_country="DE",
+                    currency="EUR",
+                    reason_status="HTTP_ERROR",
+                    direct_search_url=url,
+                    note=str(exc),
+                )
+            ]
 
-    if is_antibot_challenge(sc, body):
-        return [], [
-            _make_manual_link(
-                task,
-                channel="amazon_de",
-                route_country="DE",
-                currency="EUR",
-                reason_status=f"ANTIBOT_HTTP_{sc}",
-                direct_search_url=final_url or url,
-            )
-        ]
+        if is_antibot_challenge(sc, body):
+            return [], [
+                _make_manual_link(
+                    task,
+                    channel="amazon_de",
+                    route_country="DE",
+                    currency="EUR",
+                    reason_status=f"ANTIBOT_HTTP_{sc}",
+                    direct_search_url=final_url or url,
+                )
+            ]
 
-    offers, mlink = parse_amazon_de_html(body, task, url)
+    offers, mlink = parse_amazon_de_html(body, task, final_url or url)
     return offers, ([mlink] if mlink else [])
 
 
@@ -2142,11 +2173,11 @@ CHANNEL_HARVESTERS = {
     "olx": lambda t, q, use_chrome, chrome_path, timeout: harvest_olx(t, q, use_chrome=use_chrome, chrome_path=chrome_path, timeout=timeout),
     "rozetka": lambda t, q, _uc, _cp, timeout: harvest_rozetka(t, q, timeout=timeout),
     "prom": lambda t, q, _uc, _cp, timeout: harvest_prom(t, q, timeout=timeout),
-    "hotline": lambda t, q, _uc, _cp, timeout: harvest_hotline(t, q, timeout=timeout),
-    "aliexpress": lambda t, q, _uc, _cp, timeout: harvest_aliexpress(t, q, timeout=timeout),
+    "hotline": lambda t, q, use_chrome, chrome_path, timeout: harvest_hotline(t, q, use_chrome=use_chrome, chrome_path=chrome_path, timeout=timeout),
+    "aliexpress": lambda t, q, use_chrome, chrome_path, timeout: harvest_aliexpress(t, q, use_chrome=use_chrome, chrome_path=chrome_path, timeout=timeout),
     "idealo_de": lambda t, q, _uc, _cp, timeout: harvest_idealo_de(t, q, timeout=timeout),
     "ceneo_pl": lambda t, q, _uc, _cp, timeout: harvest_ceneo_pl(t, q, timeout=timeout),
-    "amazon_de": lambda t, q, _uc, _cp, timeout: harvest_amazon_de(t, q, timeout=timeout),
+    "amazon_de": lambda t, q, use_chrome, chrome_path, timeout: harvest_amazon_de(t, q, use_chrome=use_chrome, chrome_path=chrome_path, timeout=timeout),
 }
 
 
